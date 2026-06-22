@@ -1,6 +1,20 @@
 {
   "app": {
-    "signingConfigs": [],
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "/Users/wangboyang/.ohos/config/default_LargeFileUpload_2zw_cFDMUKabYzHr8W95XnnbK-uEUTm8X0n6QmWkVzY=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001BCF67AE4B19D324E842B88996D368CA4EF75B5FA680A821E3ABC1FB72A5E6F149807C9C447185FE",
+          "profile": "/Users/wangboyang/.ohos/config/default_LargeFileUpload_2zw_cFDMUKabYzHr8W95XnnbK-uEUTm8X0n6QmWkVzY=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "/Users/wangboyang/.ohos/config/default_LargeFileUpload_2zw_cFDMUKabYzHr8W95XnnbK-uEUTm8X0n6QmWkVzY=.p12",
+          "storePassword": "0000001BB12F4E73DCA283BE4EA6A08FF7B67125CD7E55810503A2634005D6DACA8C43D9EF8702DDED6DB5"
+        }
+      }
+    ],
     "products": [
       {
         "name": "default",
