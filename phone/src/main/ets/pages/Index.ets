@@ -48,6 +48,10 @@ struct Index {
             this.selectedFile = file
             this.addLog(`已选择文件: ${file.fileName} (${(file.fileSize / 1024 / 1024).toFixed(2)} MB)`)
             this.addLog(`文件哈希值: ${file.fileHash}`)
+            if (!this.selectedFile.fileHash) {
+              this.addLog('暂时无法上传沙箱外的文件，本次选择作废请重新选择')
+              return
+            }
             this.addLog(`文件将被分为 ${file.totalChunks} 个分片`)
             
             // 检查是否有已上传的分片
@@ -124,7 +128,7 @@ struct Index {
             .fontSize(14)
             .fontWeight(FontWeight.Bold)
             .margin({ top: 10, bottom: 5 })
-          Scroll() {
+          Scroll(this.Scroller) {
             Column({ space: 2 }) {
               ForEach(this.logMessages, (logItem: string) => {
                 Text(logItem)

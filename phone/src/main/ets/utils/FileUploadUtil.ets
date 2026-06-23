@@ -164,7 +164,7 @@ export class FileUploadUtil {
         // 累加本次上传的字节数
         uploadedBytesInSession += chunkSize
         // 计算速度 本次会话上传的字节数 / 时间
-        const speed = timeDiff > 0 ? (uploadedBytesInSession / (1024 * 1024) / timeDiff) : 0
+        const speed = timeDiff > 0 ? (uploadedBytesInSession / (1024 * 1024 * 1024) / timeDiff) : 0
 
         // 重置时间标记
         markTime = currentTime
@@ -300,6 +300,11 @@ export class FileUploadUtil {
       return buffer.from(mdOutput.data).toString('hex')
     } catch (error) {
       Logger.error(error)
+      if (error?.code == 13900002) {
+        promptAction.openToast({
+          message: "暂时无法上传沙箱外的文件，本次选择作废请重新选择"
+        })
+      }
       return ""
     }
   }
