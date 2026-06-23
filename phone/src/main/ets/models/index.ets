@@ -41,6 +41,11 @@ interface UploadProgress {
 
 export type UploadProgressCallback = (info: UploadProgress) => void
 
+/**
+ * 日志回调类型
+ */
+export type LogCallback = (message: string) => void
+
 export interface ChunksQueryRequest {
   fileHash: string
 }

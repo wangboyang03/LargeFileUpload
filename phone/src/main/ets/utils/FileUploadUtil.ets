@@ -2,7 +2,7 @@ import { fileIo, picker } from '@kit.CoreFileKit'
 import { cryptoFramework } from '@kit.CryptoArchitectureKit'
 import { buffer, taskpool } from '@kit.ArkTS'
 import { rcp } from '@kit.RemoteCommunicationKit'
-import { ChunksQueryRequest, ChunksQueryResponse, ChunkUploadResponse, FileMergeRequest, FileSelectedResponse, MergeResult, ResponseBasic, UploadCache, uploadChunkTaskResponse, UploadProgressCallback } from '../models'
+import { ChunksQueryRequest, ChunksQueryResponse, ChunkUploadResponse, FileMergeRequest, FileSelectedResponse, MergeResult, ResponseBasic, UploadCache, uploadChunkTaskResponse, UploadProgressCallback, LogCallback } from '../models'
 import { Constants } from '../Constants'
 import { Logger } from './Logger'
 import { Configuration, promptAction } from '@kit.ArkUI'
@@ -125,19 +125,35 @@ export class FileUploadUtil {
   }
 
   /**
+   * 获取上传缓存信息
+   * @returns 上传缓存对象
+   */
+  getUploadCache() {
+    if (this.uploadCache && this.uploadCache.fileHash) {
+      return this.uploadCache
+    }
+    return null
+  }
+
+  /**
    * 上传文件
    * @param filePath 文件路径
    * @param fileHash 文件哈希值
    * @param fileName 文件名
    * @param onProgress Callback回调函数
+   * @param onLog 日志回调函数
    * @returns 上传结果
    */
-  async upload(filePath: string, fileHash: string, fileName: string, onProgress?: UploadProgressCallback) {
+  async upload(filePath: string, fileHash: string, fileName: string, onProgress?: UploadProgressCallback, onLog?: LogCallback) {
     try {
-      let lastUploadedBytes = 0 // 上次上传的字节数(速度)
+      this.isUploading = true
+      let lastUploadedBytes = 0 // 上次上传的字节数
       let markTime = Date.now() // 用于计算速度的时间标记
-      // let lastUploaded = this.uploadCache.uploadedChunks.size // 上一次上传的切片数量
       const totalChunks = this.uploadCache.totalChunks
+      // const alreadyUploaded = this.uploadCache.uploadedChunks.size // 已上传的分片数
+      const log = (message: string) => {
+        onLog?.(message)
+      }
 
       // 进度回调 上传实时数据给前台页面
       const emitProgress = (currentChunk: number, completedCount: number) => {
@@ -185,19 +201,50 @@ export class FileUploadUtil {
 
       if (chunksUpload.length > 0) {
         let completedCount = 0 // 已完成上传的切片数量
+        let failedChunks: number[] = [] // 记录失败的分片
         for (let i = 0; i < chunksUpload.length; i++) {
           const chunkIndex = chunksUpload[i]
-          const res = await taskpool.execute(uploadChunkTask, filePath, fileName, chunkIndex, totalChunks, fileHash, ) as uploadChunkTaskResponse
-          if (res?.success) {
-            completedCount++
-            // 重新计算进度
-            emitProgress(chunkIndex, completedCount)
-            Logger.info(`completedCount=${completedCount}`)
-          } else {
-            // 处理失败逻辑
-            Logger.error('出错了')
+          
+          // 最多重试3次
+          let retryCount = 0
+          const maxRetries = 3
+          let success = false
+          
+          while (retryCount < maxRetries && !success) {
+            try {
+              if (retryCount > 0) {
+                log(`分片${chunkIndex + 1}/${totalChunks}的第${retryCount + 1}次重试`)
+              }
+              const res = await taskpool.execute(uploadChunkTask, filePath, fileName, chunkIndex, totalChunks, fileHash) as uploadChunkTaskResponse
+              if (res?.success) {
+                success = true
+                completedCount++
+                // 更新缓存中的已上传分片
+                this.uploadCache.uploadedChunks.add(chunkIndex)
+                // 重新计算进度
+                emitProgress(chunkIndex, completedCount)
+                log(`分片${chunkIndex + 1}上传成功，当前进度：(${completedCount}/${chunksUpload.length})`)
+              } else {
+                retryCount++
+                if (retryCount < maxRetries) {
+                  log(`分片 ${chunkIndex + 1} 上传失败，重试次数(${retryCount}/${maxRetries})`)
+                }
+              }
+            } catch (error) {
+              retryCount++
+              if (retryCount < maxRetries) {
+                log(`分片 ${chunkIndex + 1} 上传异常，重试次数(${retryCount}/${maxRetries})`)
+              }
+            }
+          }
+          
+          if (!success) {
+            failedChunks.push(chunkIndex)
+            log(`分片 ${chunkIndex + 1} 上传最终失败`)
           }
         }
+      } else {
+        log('所有分片已上传，直接合并文件')
       }
 
       const merge = await this.request<MergeResult>(`${Constants.BASE_URL}/api/upload/merge`, 'POST', {
@@ -206,17 +253,16 @@ export class FileUploadUtil {
         totalChunks,
       } as FileMergeRequest)
 
-      Logger.info(merge)
-
       if (merge?.success) {
         this.currentProgress = 100
         emitProgress(totalChunks - 1, totalChunks)
+        log('文件合并成功，上传完成!')
       }
       this.isUploading = false
       return merge
     } catch (error) {
       this.isUploading = false
-      Logger.error('上传失败', error)
+      onLog?.(`上传失败: ${JSON.stringify(error)}`)
       return
     }
   }
@@ -274,6 +320,7 @@ export class FileUploadUtil {
         const totalChunks = Math.ceil(fileSize / Constants.DEFAULT_CHUNK_SIZE) // 计算总切片数
         const res = await this.request<ChunksQueryResponse>(`${Constants.BASE_URL}/api/upload/check`, 'GET', undefined, { fileHash } as ChunksQueryRequest)
         const uploadedChunks = new Set<number>(res?.data?.uploadedChunks ?? []) // 已上传的切片索引 后端返回
+        const alreadyUploaded = uploadedChunks.size
 
         // 缓存文件信息
         this.uploadCache = {
