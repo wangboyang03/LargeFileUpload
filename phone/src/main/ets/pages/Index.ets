@@ -81,7 +81,7 @@ struct Index {
           .fontSize(12)
           .margin({ top: 4 })
         if (this.isUploading && this.uploadSpeed > 0) {
-          Text(`上传速度: ${this.uploadSpeed.toFixed(2)} KB/s`)
+          Text(`上传速度: ${this.uploadSpeed.toFixed(2)} MB/s`)
             .fontSize(12)
             .fontColor('#4CAF50')
         }

@@ -5,7 +5,7 @@ import { rcp } from '@kit.RemoteCommunicationKit'
 import { ChunksQueryRequest, ChunksQueryResponse, ChunkUploadResponse, FileMergeRequest, FileSelectedResponse, MergeResult, ResponseBasic, UploadCache, uploadChunkTaskResponse, UploadProgressCallback, LogCallback } from '../models'
 import { Constants } from '../Constants'
 import { Logger } from './Logger'
-import { Configuration, promptAction } from '@kit.ArkUI'
+import { promptAction } from '@kit.ArkUI'
 import { BusinessError } from '@kit.BasicServicesKit'
 
 @Concurrent async function uploadChunkTask(filePath: string, fileName: string, chunkIndex: number, totalChunks: number, fileHash: string) {
@@ -147,30 +147,28 @@ export class FileUploadUtil {
   async upload(filePath: string, fileHash: string, fileName: string, onProgress?: UploadProgressCallback, onLog?: LogCallback) {
     try {
       this.isUploading = true
-      let lastUploadedBytes = 0 // 上次上传的字节数
       let markTime = Date.now() // 用于计算速度的时间标记
       const totalChunks = this.uploadCache.totalChunks
+      let uploadedBytesInSession = 0 // 本次会话上传的字节数
       // const alreadyUploaded = this.uploadCache.uploadedChunks.size // 已上传的分片数
+      
       const log = (message: string) => {
         onLog?.(message)
       }
 
       // 进度回调 上传实时数据给前台页面
-      const emitProgress = (currentChunk: number, completedCount: number) => {
-        // Logger.info(`emitProgress completedCount=${completedCount}`)
+      const emitProgress = (currentChunk: number, chunkSize: number = 0) => {
         const currentTime = Date.now()
         const timeDiff = (currentTime - markTime) / 1000
-        const uploadedChunks = this.uploadCache.uploadedChunks.size + completedCount
-        const uploadedBytes = uploadedChunks * Constants.DEFAULT_CHUNK_SIZE
-        const byteDiff = uploadedBytes - lastUploadedBytes
+        const uploadedChunks = this.uploadCache.uploadedChunks.size
+        // 累加本次上传的字节数
+        uploadedBytesInSession += chunkSize
+        // 计算速度 本次会话上传的字节数 / 时间
+        const speed = timeDiff > 0 ? (uploadedBytesInSession / (1024 * 1024) / timeDiff) : 0
 
-        const speed = timeDiff > 0 ? (byteDiff / 1024 / timeDiff) : 0 // 计算速度
-
-        // 重置局部变量
+        // 重置时间标记
         markTime = currentTime
-        lastUploadedBytes = uploadedBytes
 
-        const totalChunks = this.uploadCache.totalChunks
         const progress = Math.floor((uploadedChunks / totalChunks) * 100)
         this.currentProgress = progress
 
@@ -189,7 +187,7 @@ export class FileUploadUtil {
         //   totalChunks=${totalChunks}
         // `)
       }
-      emitProgress(-1, 0) // 需要将初始化进度、当前文件总切片数以及当前进度传给前台
+      emitProgress(-1) // 初始化进度
 
       // 获取所有未上传的切片索引
       const chunksUpload: number[] = []
@@ -221,8 +219,13 @@ export class FileUploadUtil {
                 completedCount++
                 // 更新缓存中的已上传分片
                 this.uploadCache.uploadedChunks.add(chunkIndex)
+                // 计算当前分片的实际大小
+                const fileSize = this.uploadCache.fileSize
+                const start = chunkIndex * Constants.DEFAULT_CHUNK_SIZE
+                const end = Math.min(start + Constants.DEFAULT_CHUNK_SIZE, fileSize)
+                const actualChunkSize = end - start
                 // 重新计算进度
-                emitProgress(chunkIndex, completedCount)
+                emitProgress(chunkIndex, actualChunkSize)
                 log(`分片${chunkIndex + 1}上传成功，当前进度：(${completedCount}/${chunksUpload.length})`)
               } else {
                 retryCount++
@@ -255,7 +258,7 @@ export class FileUploadUtil {
 
       if (merge?.success) {
         this.currentProgress = 100
-        emitProgress(totalChunks - 1, totalChunks)
+        emitProgress(totalChunks - 1)
         log('文件合并成功，上传完成!')
       }
       this.isUploading = false
@@ -320,7 +323,7 @@ export class FileUploadUtil {
         const totalChunks = Math.ceil(fileSize / Constants.DEFAULT_CHUNK_SIZE) // 计算总切片数
         const res = await this.request<ChunksQueryResponse>(`${Constants.BASE_URL}/api/upload/check`, 'GET', undefined, { fileHash } as ChunksQueryRequest)
         const uploadedChunks = new Set<number>(res?.data?.uploadedChunks ?? []) // 已上传的切片索引 后端返回
-        const alreadyUploaded = uploadedChunks.size
+        // const alreadyUploaded = uploadedChunks.size
 
         // 缓存文件信息
         this.uploadCache = {
