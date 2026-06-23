@@ -6,7 +6,13 @@ import { PromptAction } from '@kit.ArkUI';
 @Component
 struct Index {
   // @State message: string = 'Hello World';
-  @State selectedFile: FileSelectedResponse = {} as FileSelectedResponse // 选择文件对象
+  @State selectedFile: FileSelectedResponse = {
+    fileName: "",
+    filePath: "",
+    fileSize: 0,
+    fileHash: "",
+    totalChunks: 0,
+  } as FileSelectedResponse // 选择文件对象
   @State uploadProgress:number = 0 // 当前进度
   @State isUploading: boolean = false // 是否正在上传
   promptAction: PromptAction = this.getUIContext().getPromptAction()
@@ -21,14 +27,14 @@ struct Index {
           }
         })
       Column({space: 5}) {
-        Text("文件名: "+`${this.selectedFile.fileName}` ?? "请先选择文件")
+        Text(this.selectedFile.fileName ? `文件名: ${this.selectedFile.fileName}` : '请先选择文件')
           .fontSize(12)
           .margin({ top: 4 })
-        Text("文件大小: "+`${(this.selectedFile.fileSize / 1024 / 1024).toFixed(2)} MB` ?? "请先选择文件")
+        Text("文件大小: "+`${(this.selectedFile.fileSize / 1024 / 1024).toFixed(2)} MB`)
           .fontSize(12)
-        Text("文件哈希: "+`${this.selectedFile.fileHash}` ?? "请先选择文件")
+        Text(this.selectedFile.fileHash ? `文件哈希值: ${this.selectedFile.fileName}` : '当前无法获取哈希值')
           .fontSize(12)
-        Text("切片数量: "+`${this.selectedFile.totalChunks}` ?? "请先选择文件")
+        Text("切片数量: "+ this.selectedFile.totalChunks)
           .fontSize(12)
         Text(`上传进度: ${this.uploadProgress}%`)
           .fontSize(12)

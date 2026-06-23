@@ -5,6 +5,8 @@ import { rcp } from '@kit.RemoteCommunicationKit'
 import { ChunksQueryRequest, ChunksQueryResponse, ChunkUploadResponse, FileMergeRequest, FileSelectedResponse, MergeResult, ResponseBasic, UploadCache, uploadChunkTaskResponse, UploadProgressCallback } from '../models'
 import { Constants } from '../Constants'
 import { Logger } from './Logger'
+import { Configuration, promptAction } from '@kit.ArkUI'
+import { BusinessError } from '@kit.BasicServicesKit'
 
 @Concurrent async function uploadChunkTask(filePath: string, fileName: string, chunkIndex: number, totalChunks: number, fileHash: string) {
   // 并发函数是全局函数 没有this上下文 也不能写闭包代码 调用外部方法
@@ -99,11 +101,25 @@ export class FileUploadUtil {
       // 2. headers类型
       const headers: rcp.RequestHeaders = { 'Content-Type': 'application/json' }
       // 3.统一处理请求
-      const request = new rcp.Request(finalUrl, method, headers, data)
+      const timeout: rcp.Configuration = {
+        transfer: {
+          timeout: {
+            transferMs: Constants.TIME_OUT,
+            connectMs: Constants.TIME_OUT,
+            inactivityMs: Constants.TIME_OUT
+          }
+        }
+      } // 超时时间
+      const request = new rcp.Request(finalUrl, method, headers, data, {}, {}, timeout)
       const res = await this.session.fetch(request)
       return res.toJSON() as ResponseBasic<T>
-    } catch (error) {
-      Logger.error('出错了', error)
+    } catch (_error) {
+      let error = _error as BusinessError
+      Logger.error('出错了', JSON.stringify({ code: error.code, message: error.message }))
+      if (error.code == 1007900028)
+      promptAction.openToast({
+        message: "连接超时,请检查网络连接。"
+      })
       return
     }
   }
